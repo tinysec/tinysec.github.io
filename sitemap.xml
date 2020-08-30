@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  
+  <url>
+    <loc>https://io.tinysec.net/vulnerability/index.html</loc>
+    
+    <lastmod>2020-08-30T02:05:45.756Z</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://io.tinysec.net/post/2020/08/security/</loc>
+    
+    <lastmod>2020-08-30T02:05:45.754Z</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://io.tinysec.net/about/index.html</loc>
+    
+    <lastmod>2020-08-30T02:05:45.754Z</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_zh/</loc>
+    
+    <lastmod>2020-08-30T02:05:45.742Z</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/</loc>
+    
+    <lastmod>2020-08-30T02:05:45.731Z</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://io.tinysec.net/post/2016/10/about-fuzz/</loc>
+    
+    <lastmod>2020-08-30T02:05:45.730Z</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://io.tinysec.net/post/2006/09/hello-world/</loc>
+    
+    <lastmod>2020-08-30T02:05:45.722Z</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://io.tinysec.net/post/2016/02/fuzz-windows-kernel-via-javascript/</loc>
+    
+    <lastmod>2020-08-30T02:05:45.722Z</lastmod>
+    
+  </url>
+  
+</urlset>
