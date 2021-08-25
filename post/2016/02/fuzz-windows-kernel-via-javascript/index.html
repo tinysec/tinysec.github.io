@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<html class="theme-next mist" lang="en">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2"/>
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+  
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=6.3.0" rel="stylesheet" type="text/css" />
+
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.ico?v=6.3.0">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon.ico?v=6.3.0">
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Mist',
+    version: '6.3.0',
+    sidebar: {"display":"remove","offset":12,"b2t":true,"scrollpercent":true,"onmobile":false},
+    fancybox: false,
+    fastclick: false,
+    lazyload: false,
+    tabs: true,
+    motion: {"enable":false,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+  
+
+
+
+
+  <meta name="description" content="&amp;emsp;&amp;emsp;微软在今年2月和3月补了我去年年底报的2个win32k里的漏洞MS16-018/CVE-2016-0048 ,M16-034/CVE-2016-0096, 关于这2个漏洞的细节，各位同学有兴趣可以Diff一下,今天这篇不写. 对于这两个漏洞的背后的小故事,倒是有点意思。 fuzz的过程中，频繁的修改fuzzer代码，并验证思路是很普遍的过程。 为了保证fuzz环境的干净，虚">
+<meta name="keywords" content="kernel,vulnerability,javascript,chakra">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Fuzz Windows Kernel Via Javascript">
+<meta property="og:url" content="https://io.tinysec.net/post/2016/02/fuzz-windows-kernel-via-javascript/index.html">
+<meta property="og:site_name" content="TinyBlog">
+<meta property="og:description" content="&amp;emsp;&amp;emsp;微软在今年2月和3月补了我去年年底报的2个win32k里的漏洞MS16-018/CVE-2016-0048 ,M16-034/CVE-2016-0096, 关于这2个漏洞的细节，各位同学有兴趣可以Diff一下,今天这篇不写. 对于这两个漏洞的背后的小故事,倒是有点意思。 fuzz的过程中，频繁的修改fuzzer代码，并验证思路是很普遍的过程。 为了保证fuzz环境的干净，虚">
+<meta property="og:locale" content="en">
+<meta property="og:image" content="https://io.tinysec.net/post/2016/02/fuzz-windows-kernel-via-javascript/jsfuzz.jpg">
+<meta property="og:updated_time" content="2021-08-25T10:31:43.387Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Fuzz Windows Kernel Via Javascript">
+<meta name="twitter:description" content="&amp;emsp;&amp;emsp;微软在今年2月和3月补了我去年年底报的2个win32k里的漏洞MS16-018/CVE-2016-0048 ,M16-034/CVE-2016-0096, 关于这2个漏洞的细节，各位同学有兴趣可以Diff一下,今天这篇不写. 对于这两个漏洞的背后的小故事,倒是有点意思。 fuzz的过程中，频繁的修改fuzzer代码，并验证思路是很普遍的过程。 为了保证fuzz环境的干净，虚">
+<meta name="twitter:image" content="https://io.tinysec.net/post/2016/02/fuzz-windows-kernel-via-javascript/jsfuzz.jpg">
+
+
+
+  <link rel="alternate" href="/atom.xml" title="TinyBlog" type="application/atom+xml" />
+
+
+
+
+  <link rel="canonical" href="https://io.tinysec.net/post/2016/02/fuzz-windows-kernel-via-javascript/"/>
+
+
+
+<script type="text/javascript" id="page.configurations">
+  CONFIG.page = {
+    sidebar: "",
+  };
+</script>
+
+  <title>Fuzz Windows Kernel Via Javascript | TinyBlog</title>
+  
+
+
+
+
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-114832940-3"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-114832940-3');
+</script>
+
+
+
+
+
+
+  <noscript>
+  <style type="text/css">
+    .use-motion .motion-element,
+    .use-motion .brand,
+    .use-motion .menu-item,
+    .sidebar-inner,
+    .use-motion .post-block,
+    .use-motion .pagination,
+    .use-motion .comments,
+    .use-motion .post-header,
+    .use-motion .post-body,
+    .use-motion .collection-title { opacity: initial; }
+
+    .use-motion .logo,
+    .use-motion .site-title,
+    .use-motion .site-subtitle {
+      opacity: initial;
+      top: initial;
+    }
+
+    .use-motion {
+      .logo-line-before i { left: initial; }
+      .logo-line-after i { right: initial; }
+    }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="en">
+
+  
+  
+
+  <div class="container  page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/" class="brand" rel="start">
+        <!-- <span class="logo-line-before"><i></i></span> -->
+        <span class="site-title">TinyBlog</span>
+        <!--  <span class="logo-line-after"><i></i></span>  -->
+      </a>
+    </div>
+    
+      
+        <h1 class="site-subtitle" itemprop="description">TinySec's blog</h1>
+      
+    
+  </div>
+
+  <div class="site-nav-toggle">
+    <button aria-label="Toggle navigation bar">
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  
+    <ul id="menu" class="menu">
+      
+        
+        
+        
+          
+          <li class="menu-item menu-item-home">
+    <a href="/" rel="section">
+      <i class="menu-item-icon fa fa-fw fa-home"></i> <br />Home</a>
+  </li>
+        
+        
+        
+          
+          <li class="menu-item menu-item-archives">
+    <a href="/archives" rel="section">
+      <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />Archives</a>
+  </li>
+        
+        
+        
+          
+          <li class="menu-item menu-item-about">
+    <a href="/about" rel="section">
+      <i class="menu-item-icon fa fa-fw fa-user"></i> <br />About</a>
+  </li>
+
+      
+      
+    </ul>
+  
+
+  
+    
+
+  
+
+  
+</nav>
+
+
+
+  
+
+
+
+</div>
+    </header>
+
+    
+
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="https://io.tinysec.net/post/2016/02/fuzz-windows-kernel-via-javascript/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="TinySec">
+      <meta itemprop="description" content="TinySec's blog">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="TinyBlog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h2 class="post-title" itemprop="name headline">Fuzz Windows Kernel Via Javascript
+              
+            
+          </h2>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+
+            
+            
+            
+
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+
+              
+                
+              
+
+              <time title="Created: 2016-02-21 00:00:00" itemprop="dateCreated datePublished" datetime="2016-02-21T00:00:00Z">2016-02-21</time>
+            
+
+            
+          </span>
+
+          
+            <span class="post-category" >
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">In</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing"><a href="/categories/vulnerability/" itemprop="url" rel="index"><span itemprop="name">vulnerability</span></a></span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>&emsp;&emsp;微软在今年2月和3月补了我去年年底报的2个win32k里的漏洞MS16-018/CVE-2016-0048 ,M16-034/CVE-2016-0096,</p>
+<p>关于这2个漏洞的细节，各位同学有兴趣可以Diff一下,今天这篇不写.</p>
+<p>对于这两个漏洞的背后的小故事,倒是有点意思。</p>
+<p>fuzz的过程中，频繁的修改fuzzer代码，并验证思路是很普遍的过程。</p>
+<p>为了保证fuzz环境的干净，虚拟机里没有安装任何第三方软件。所以</p>
+<p>每次在物理机里修改完fuzzer代码,然后编译，然后传输到虚拟机里，是一件烦琐又低效的事情。</p>
+<p>最开始fuzzer都是用C写的，所以在虚拟机里也装了一套WDK的编译环境，然后每次需要验证思路时，在虚拟机里，用Notepad++直接修改fuzzer代码，用WDK编译，执行结果。</p>
+<p>&emsp;&emsp;去年8月初，无意间发现了微软的Chakra这个js引擎，</p>
+<p>既然V8可以用来做nodejs, 辅助后端开发。</p>
+<p>何不用用js来写fuzzer,语法和C很接近，想必修改代码起来会很方便， 移植之前c写的fuzzer也会很容易。</p>
+<p>于是开始研究Chakra 的文档，这就是后来的JSRT项目, 意思是 Javascript Runtime ,</p>
+<p>&emsp;&emsp;Chakra 本身只是一个基本js引擎，只能能执行基本的表达式。</p>
+<p>在MS的文档里，对于只是想用js来作为插件语言的软件，给需要提供的SDK函数每一个都写一个包装函数，用JsCreateFunction注册后，js即可调用。</p>
+<p>&emsp;&emsp;但是我的目标是用js来Fuzz内核，面对的是整个操作系统，win32的api函数太多了，不可能给每个函数都写一个c的包装函数，给js调用。</p>
+<p>于是想到一些tips 来hack 这个过程。</p>
+<p>由于js没有指针类型，而很多api函数都是需要传递指针类型的参数，这就需要让js具备直接操作内存的能力，对于指针本身，使用js里的整数来模拟。</p>
+<p>使用c提供malloc/free, getCHAR…setULONG,等函数，js就能直接读写内存。</p>
+<p>为了获取函数地址，首先得知道模块地址，所以我提供了LoadLibrary、GetModuleHandle</p>
+<p>然后在GetProcAddress的帮助下，就能获取任意函数的地址。</p>
+<p>具备了直接读写内存的能力，再加上函数地址的获取，就能直接的调用api了。</p>
+<p>比如对于2个参数个数的stdcall类型函数，可以抽象为，</p>
+<pre><code>RoutineResult = ((LPFN_STDCALL2Param)(RoutineAddress))(ArgArray[0], ArgArray[1]);
+</code></pre><p>在 js 层 获取都是 DWORD类型的返回值，然后，手动转换成js类型即可。</p>
+<p>&emsp;&emsp;对于参数比较简单的函数，如Beep，参数类型都是数值，很好处理。</p>
+<p>但是对于 EnumWindow 这种，需要提供一个回掉函数作为参数。</p>
+<p>就需要完成 js-&gt;c -&gt; js 跨语言的过程。</p>
+<p>&emsp;&emsp;对于js-&gt;c 比较好理解，但是c -&gt; js 这个过程就有点麻烦了。</p>
+<p>因为在 c-&gt;js 的过程中，除了js所需要的参数，还得传递Charka需要的当前Context等信息。</p>
+<p>后来想到使用Thunk的思路，使用asm 来重新布局 栈上的参数，额外的传递 Chakra所需要的Runtime Context 信息， 当前js对象信息，和js 回掉函数对象。</p>
+<p>&emsp;&emsp;这样，在C层面，只提供最小的辅助给Chakra，就能让js能直接跨语言调用所有api.</p>
+<p>事实证明，这套JSRT还是很方便的。</p>
+<p>比如在 调用 ShadowSSDT 里的函数时，无需定义参数原型，直接使用</p>
+<p>function NtGdiAngleArc( arg_01,  arg_02 ,  arg_03,  arg_04 ,  arg_05,  arg_06 )<br>{</p>
+<pre><code>return Invoke( W32pServiceTable[&quot;NtGdiAngleArc&quot;] , arg_01,  arg_02 ,  arg_03,  arg_04 ,  arg_05,  arg_06 );
+</code></pre><p>}</p>
+<p>就能方便的调用任意SDT函数。</p>
+<p>&emsp;&emsp;光有这些还不够，还需要一个js的基本库来辅助调用，比如js本身没有printf函数，等等。</p>
+<p>期间因为频繁的被业务模块维护打断，断断续续的写了几个月。</p>
+<p>&emsp;&emsp;去年11月初，因为某比赛的原因，切换目标到win32k, 刚好来验证这套环境的效果和方便性。</p>
+<p>于是有了后来的 CVE-2016-0096 ，可能是第一个用js fuzz出来的内核洞。</p>
+<p>蓝屏时，就可以看到一个很有意思的栈，从jscript一路到内核。</p>
+<p><img src="jsfuzz.jpg" alt=""></p>
+
+      
+    </div>
+
+    
+
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/kernel/" rel="tag"># kernel</a>
+          
+            <a href="/tags/vulnerability/" rel="tag"># vulnerability</a>
+          
+            <a href="/tags/javascript/" rel="tag"># javascript</a>
+          
+            <a href="/tags/chakra/" rel="tag"># chakra</a>
+          
+        </div>
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/post/2006/09/hello-world/" rel="next" title="Hello World">
+                <i class="fa fa-chevron-left"></i> Hello World
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/post/2016/10/about-fuzz/" rel="prev" title="关于 fuzz 的一些思考">
+                关于 fuzz 的一些思考 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+  </div>
+
+
+          </div>
+          
+
+  
+
+
+
+        </div>
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; 2006 – <span itemprop="copyrightYear">2021</span>
+
+  <span class="with-love" id="animate">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="https://io.tinysec.net"> Home  </a> </span>
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-address-card"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="mailto:tinyxc@gmail.com"> E-mail </a> </span>
+  
+
+  <span class="with-love" id="animate">
+    <i class="fa fa-github"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="https://github.com/tinysec"> Github </a> </span>
+  
+ 
+  <span class="with-love" id="animate">
+    <i class="fa fa-twitter"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="https://twitter.com/TinySecEx"> Twitter </a> </span>
+  
+	<!--
+  <span class="with-love" id="animate">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/about"> About </a> </span>
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-bug"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/vulnerability"> Vulnerability </a> </span>
+  
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-archive"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/archives"> Archives </a> </span>
+  
+  -->
+  <span class="with-love" id="animate">
+    <i class="fa fa-book"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/atom.xml"> RSS </a> </span>
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-sitemap"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/sitemap.xml"> Sitemap </a> </span>
+  
+  
+  <!-- links -->
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-briefcase"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="https://www.iceswordlab.com"> IceSword Lab </a> </span>
+
+  
+
+  
+</div>
+
+
+  
+
+
+
+
+
+
+
+
+
+
+        
+
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+
+    
+	
+    
+
+    
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/velocity/2.0.5/velocity.min.js"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/velocity/2.0.5/velocity.ui.min.js"></script>
+  
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=6.3.0"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=6.3.0"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=6.3.0"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=6.3.0"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=6.3.0"></script>
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

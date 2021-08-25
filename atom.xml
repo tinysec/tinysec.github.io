@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>TinyBlog</title>
+  
+  <subtitle>TinySec&#39;s blog</subtitle>
+  <link href="/atom.xml" rel="self"/>
+  
+  <link href="https://io.tinysec.net/"/>
+  <updated>2021-08-25T10:31:43.391Z</updated>
+  <id>https://io.tinysec.net/</id>
+  
+  <author>
+    <name>TinySec</name>
+    
+  </author>
+  
+  <generator uri="http://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>Automatically Discovering Windows Kernel Information Leak Vulnerabilities</title>
+    <link href="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/"/>
+    <id>https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/</id>
+    <published>2017-06-14T00:00:00.000Z</published>
+    <updated>2021-08-25T10:31:43.391Z</updated>
+    
+    <content type="html"><![CDATA[<h2 id="TL-DR"><a href="#TL-DR" class="headerlink" title="TL;DR"></a>TL;DR</h2><p>&emsp;&emsp;This Patch-Tuesday MS fixed 6 kernel information leak vulnerabilities reported by us, the details are at the end of this article.<br>I had already show how to fuzz the windows kernel via JS , today we will introduce a new method to discover windows kernel vulnerabilities automatically without fuzzing.<br>I selected a small part from the work in the past few months to spread out this topic.</p><h2 id="KASLR"><a href="#KASLR" class="headerlink" title="KASLR"></a>KASLR</h2><p>&emsp;&emsp;In Windows Vista and above, Microsoft enable Kernel Address Space Layout Randomization (KASLR) by default to prevent exploitation by placing various objects at random addresses, rather than fixed ones. It is an effective method against exploitation using Return-oriented Programming (ROP) attack.     </p><p>&emsp;&emsp;Beginning with Windows 8, KASLR is enhanced with a newly introduced function ExIsRestrictedCaller.<br> Programs under medium integrity are not able to invoke functions such as NtQuerySystemInformation to obtain addresses of kernel modules, kernel objects or pools.      </p><p>The functions include but not limited to:</p><h3 id="NtQuerySystemInformation"><a href="#NtQuerySystemInformation" class="headerlink" title="NtQuerySystemInformation"></a>NtQuerySystemInformation</h3><pre><code>* SystemModuleInformation * SystemModuleInformationEx * SystemLocksInformation * SystemStackTraceInformation * SystemHandleInformation * SystemExtendedHandleInformation * SystemObjectInformation * SystemBigPoolInformation * SystemSessionBigPoolInformation * SystemProcessInformation* SystemFullProcessInformation</code></pre><h3 id="NtQueryInfomationThread"><a href="#NtQueryInfomationThread" class="headerlink" title="NtQueryInfomationThread"></a>NtQueryInfomationThread</h3><h3 id="NtQueryInfomationProcess"><a href="#NtQueryInfomationProcess" class="headerlink" title="NtQueryInfomationProcess"></a>NtQueryInfomationProcess</h3><p>The above is the traditional way to get the kernel module address and kernel object address, as the kernel normal feature.<br>But after win8, low integrity application will fail in calling these functions.     </p><p>&emsp;&emsp;In order to bypass KASLR, a direct countermeasure is to discover vulnerabilities that leak valuable information from the kernel mode to calculate the address of kernel module or kernel object.     </p><h2 id="Kernel-Information-Leak"><a href="#Kernel-Information-Leak" class="headerlink" title="Kernel Information Leak"></a>Kernel Information Leak</h2><p>&emsp;&emsp;As a kind of kernel vulnerability, it has its own uniqueness. For example, for the traditional memory damage vulnerabilities, the vulnerability itself will affect the running of the kernel. With the help of verifier and other tools, you can easily capture this exception among the normal traffic.<br>But the kernel information leak vulnerability does not trigger any exception, nor does it affect the running of the kernel, which makes it more difficult to be discovered.<br>Vulnerabilities objectively exist, what we need to do is to find them at lowest cost.      </p><h2 id="Discover-ideas"><a href="#Discover-ideas" class="headerlink" title="Discover ideas"></a>Discover ideas</h2><p>&emsp;&emsp;When kernel information leak vulnerability occurs, the kernel will certainly write some valuable data to the user buffer.<br>So if we monitor all the writing behaviors to user buffer in the kernel, we will be able to find them.      </p><p>Of course, the system does not provide this feature.<br>I capture the process with the help of a hardware virtualization based framework of pjf,<br>who is the author of the famous windows kernel anti-rootkit tool named iceSword. </p><p><img src="DigTool.png" alt="">            </p><p>In order not to affect the dest system itself, I monitored in the VMWARE guest and write some log files, and then further analyze them in the host system.  </p><p><img src="loader.png" alt="">     </p><p>In the host machine, after decoding and analyzing the logs:  </p><p><img src="analyze.png" alt="">    </p><p>Then we have the human-readable logs: </p><p><img src="log.png" alt="">       </p><h2 id="Further-Analysis"><a href="#Further-Analysis" class="headerlink" title="Further Analysis"></a>Further Analysis</h2><p>&emsp;&emsp;Now we have operation records in user memory buffer written by kernel.<br>Most of them are just normal functions.     </p><p>We need remove nosiy data to find out the key information.<br>Two skills are needed.     </p><h3 id="Poison-the-kernel-stack"><a href="#Poison-the-kernel-stack" class="headerlink" title="Poison the kernel stack"></a>Poison the kernel stack</h3><p>&emsp;&emsp;Poisoning or polluting the target is a common idea.<br>At network penetration testing, there are also ARP and DNS cache poisoning.       </p><p>Here is the kernel stack poisoning, refers to the pollution to the entire unused kernel stack space.     </p><p>If a variable on a kernel stack is not initialized, then when this variable is written to the user buffer, there will be a magic value in the record written by me. Wherever these is a magic value, there is a leak.        </p><p>I noticed that j00ru also used similar techniques in his BochsPwn project.        </p><h4 id="KiFastCallEntry-Hook"><a href="#KiFastCallEntry-Hook" class="headerlink" title="KiFastCallEntry Hook"></a>KiFastCallEntry Hook</h4><p>&emsp;&emsp;In order to poison the kernel stack, I hooked nt!KiFastCallEntry.<br>So that when a syscall invoked, I can poisoning the entire unused kernel stack space.  </p><p><img src="KiFastCallEntryHook.png" alt="">      </p><p>Firstly, I used <strong> IoGetStackLimits </strong> to get the current thread stack range, and then from the bottom of the stack to the current stack location of the entire space are filled with 0xAA.     </p><p>So when I entered the syscall, all the contents of the local variables on the kernel stack will be filled into 0xAA.       </p><h3 id="Poison-the-kernel-pool"><a href="#Poison-the-kernel-pool" class="headerlink" title="Poison the kernel pool"></a>Poison the kernel pool</h3><p>&emsp;&emsp;Similarly, for dynamically allocated memory, I used hook <strong>nt!ExAllocatePoolWithTag</strong> and so on, and polluted its POOL content.</p><p>If the kernel stack/heap variable is not properly initialized, it is possible to write this magic value to the user buffer.   </p><p>With the help of the logs we captured, we can immediately find this vulnerability.<br>In order to remove the coincidence, I also used a number of magic value such as <strong>0xAAAAAAAA</strong> , <strong>0xBBBBBBB</strong> to exclude false positives.       </p><p>A typical result after excluding the interference is as follows.    </p><p><img src="magic.png" alt="">      </p><p>&emsp;&emsp;You can see that in a short monitoring process, it caught the <strong> 161 </strong> leaks in the system!<br>Of course, this is not exhaustive. There are not so many independent vulnerabilities, but some vulnerabilities made repeated leaks.       </p><p>At this point we caught a real information leak vulnerability, there is stack information, supplemented by a simple manual analysis, we can got the details.<br>This is also the story behind the <strong>CVE-2017-8482</strong>.     </p><h3 id="Difference-comparison"><a href="#Difference-comparison" class="headerlink" title="Difference comparison"></a>Difference comparison</h3><p>&emsp;&emsp;For the kernel information leak caused by the uninitialized stack, we can poison them at first and then find them.<br>But for the direct disclosure of key information, such as the module and the object address written directly, it cannot be found in this way.      </p><p>In the process of the system running, the kernel itself will frequently write data to the user buffer, a lot of data is in the kernel address range, but in fact it is not a valid address, but a noise data.<br>There are many such noise data, such as strings, pixels, rect, region, etc. which are likely happen to be a kernel address. We need to rule out the noise and found a real leak.      </p><p>Here we filter out some meaningful addresses, such as:     </p><ol><li>Module address, must be inside in the system module list     </li><li>object address    </li><li>POOL address   </li></ol><p>After the environment changes, such as restarting the system,  it must be able to leak the same type of data at the same location.     </p><p>After the exclusion of the normal function of the system, such as <strong>NtQuerySystemInformation</strong> and similar functions, the left data’s credibility is very high.    </p><h3 id="The-leak-of-module-address"><a href="#The-leak-of-module-address" class="headerlink" title="The leak of module address"></a>The leak of module address</h3><p>For example <strong>CVE-2017-8485</strong>   </p><p><img src="diff.png" alt="">    </p><p>You can see that the results at this time is very obvious - the same stack, the same location, are leaked <strong>nt! ObpReferenceObjectByHandleWithTag + 0x19f</strong>    </p><p><img src="vul1_detail.png" alt="">    </p><h3 id="The-leak-of-object-address"><a href="#The-leak-of-object-address" class="headerlink" title="The leak of object address"></a>The leak of object address</h3><p>Due to leakage of object address and POOL address not fixed by Microsoft this month, I cannot describe the details.  </p><p><img src="object.png" alt="">    </p><h2 id="More"><a href="#More" class="headerlink" title="More"></a>More</h2><p>You can see that we do not need a fuzzer, only through the code coverage generated by normal running of the system itself, we found these vulnerabilities.<br>Any normal program running can improve this coverage.<br>In fact, in the actual work, I only use the game and the browser to improve coverage and got good results.<br>A game finished, ten kernel vulnerabilities on the hand.</p><p><img src="game.jpg" alt="">     </p><h2 id="The-case-of-this-month"><a href="#The-case-of-this-month" class="headerlink" title="The case of this month"></a>The case of this month</h2><h3 id="CVE-2017-8470"><a href="#CVE-2017-8470" class="headerlink" title="CVE-2017-8470"></a>CVE-2017-8470</h3><p><img src="CVE-2017-8470.png" alt="">   </p><h3 id="CVE-2017-8474"><a href="#CVE-2017-8474" class="headerlink" title="CVE-2017-8474"></a>CVE-2017-8474</h3><p><img src="CVE-2017-8474.png" alt="">   </p><h3 id="CVE-2017-8476"><a href="#CVE-2017-8476" class="headerlink" title="CVE-2017-8476"></a>CVE-2017-8476</h3><p><img src="CVE-2017-8476.png" alt="">    </p><h3 id="CVE-2017-8482"><a href="#CVE-2017-8482" class="headerlink" title="CVE-2017-8482"></a>CVE-2017-8482</h3><p><img src="CVE-2017-8482.png" alt="">    </p><h3 id="CVE-2017-8485"><a href="#CVE-2017-8485" class="headerlink" title="CVE-2017-8485"></a>CVE-2017-8485</h3><p><img src="CVE-2017-8485.png" alt="">    </p>]]></content>
+    
+    <summary type="html">
+    
+      
+      
+        &lt;h2 id=&quot;TL-DR&quot;&gt;&lt;a href=&quot;#TL-DR&quot; class=&quot;headerlink&quot; title=&quot;TL;DR&quot;&gt;&lt;/a&gt;TL;DR&lt;/h2&gt;&lt;p&gt;&amp;emsp;&amp;emsp;This Patch-Tuesday MS fixed 6 kernel informati
+      
+    
+    </summary>
+    
+      <category term="vulnerability" scheme="https://io.tinysec.net/categories/vulnerability/"/>
+    
+    
+      <category term="kernel" scheme="https://io.tinysec.net/tags/kernel/"/>
+    
+      <category term="vulnerability" scheme="https://io.tinysec.net/tags/vulnerability/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>自动化挖掘 windows 内核信息泄漏漏洞</title>
+    <link href="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_zh/"/>
+    <id>https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_zh/</id>
+    <published>2017-06-14T00:00:00.000Z</published>
+    <updated>2021-08-25T10:31:43.395Z</updated>
+    
+    <content type="html"><![CDATA[<h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>&emsp;&emsp;2017年6月补丁日，修复了我们之前报告的6个内核信息泄漏漏洞 , 文章末尾有细节。<br>前年我演示过如何用JS来fuzz 内核，今天我们要给大家带来的是不依赖fuzz，来自动化挖掘内核漏洞。<br>从最近的几个月工作里，选取了一个小点，说下内核信息泄漏类型漏洞的挖掘。   </p><h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>&emsp;&emsp;windows vista 之后，微软对内核默认启用了了ASLR ，简称KASLR.<br>KASLR 随机化了模块的加载基址 , 内核对象的地址等，缓解了漏洞的利用。   </p><p>&emsp;&emsp;在win8 之后，这项安全特性的得到了进一步的增强。<br>引入 nt!ExIsRestrictedCaller 来阻止Low integrity 的程序调用某些可以泄漏出模块基址，内核对象地址等关键信息的函数。<br>包括但不限于:</p><h3 id="NtQuerySystemInformation"><a href="#NtQuerySystemInformation" class="headerlink" title="NtQuerySystemInformation"></a>NtQuerySystemInformation</h3><pre><code>* SystemModuleInformation * SystemModuleInformationEx * SystemLocksInformation * SystemStackTraceInformation * SystemHandleInformation * SystemExtendedHandleInformation * SystemObjectInformation * SystemBigPoolInformation * SystemSessionBigPoolInformation * SystemProcessInformation* SystemFullProcessInformation</code></pre><h3 id="NtQueryInfomationThread"><a href="#NtQueryInfomationThread" class="headerlink" title="NtQueryInfomationThread"></a>NtQueryInfomationThread</h3><h3 id="NtQueryInfomationProcess"><a href="#NtQueryInfomationProcess" class="headerlink" title="NtQueryInfomationProcess"></a>NtQueryInfomationProcess</h3><p>&emsp;&emsp;以上是传统的可以获取 内核模块地址和内核对象地址的方法 , 作为内核正常的功能。<br>但对于integrity 在medium 以下的程序，在win8 以后调用会失败。   </p><p>&emsp;&emsp;KASLR 作为一项漏洞利用缓解措施，其中的一个目的就是为了使得构建通用的ROP-CHAIN 更为困难.<br>作为漏洞的利用者来说，挖掘出信息泄漏漏洞，来直接泄漏出所需要的模块基址，就是直接对抗KASLR的办法。   </p><h2 id="特点"><a href="#特点" class="headerlink" title="特点"></a>特点</h2><p>&emsp;&emsp;作为内核漏洞的一种，在挖掘的过程中有特殊的地方。比如，对于传统内存损坏类漏洞而言，漏洞本身就会影响系统的正常运行，使用verifier等工具，能较为方便的捕获这种异常。<br>但是信息泄漏类型的漏洞，并不会触发异常，也不会干扰系统的正常运行，这使得发现它们较为困难。<br>漏洞是客观存在的，我们需要做的以尽可能小的成本去发现它们。   </p><h2 id="挖掘思路"><a href="#挖掘思路" class="headerlink" title="挖掘思路"></a>挖掘思路</h2><p>&emsp;&emsp;泄漏发生时，内核必然会把关键的信息写入用户态的内存，如果我们监控所有内核态写用户态地址的写操作，就能捕获这个行为。<br>当然系统并没有提供这个功能，这一过程由@pjf的一个专门的基于硬件虚拟化的挖掘框架进行捕获。   </p><p><img src="DigTool.png" alt="">            </p><p>为了不干扰目标系统本身的操作，我在虚拟机里执行监控，获取必要的信息，在写成log后，再在宿主机进行二次分析。 </p><p><img src="loader.png" alt=""><br>在物理机里，解码日志并加载符号，做一些处理之后  </p><p><img src="analyze.png" alt="">  </p><p>就得到这样的一批日志。</p><p><img src="log.png" alt="">       </p><h2 id="二次分析"><a href="#二次分析" class="headerlink" title="二次分析"></a>二次分析</h2><p>&emsp;&emsp;现在我们有了一段实际运行过程中内核写到用户态内存的所有记录。这里面绝大多数都是正常的功能，<br>我们需要排除掉干扰，找出数据是关键信息的。<br>这里主要用到了两个技巧。    </p><h3 id="污染内核栈"><a href="#污染内核栈" class="headerlink" title="污染内核栈"></a>污染内核栈</h3><p>&emsp;&emsp;毒化或者说污染目标数据，是一种常见的思路。在网络攻防里，也有ARP 和DNS缓存的投毒。<br>这里所说的内核栈毒化，指的就是污染整个未使用的内核栈空间。如果某个内核栈上的变量没有初始化，<br>那么在这个变量被写到到用户态时，写入的数据里就有我所标记的magic value ,找出这个magic value所在的记录，就是泄漏的发生点。<br>同时我注意到，j00ru 在他的BochsPwn项目里也曾使用了类似的技巧。    </p><h4 id="KiFastCallEntry-Hook"><a href="#KiFastCallEntry-Hook" class="headerlink" title="KiFastCallEntry Hook"></a>KiFastCallEntry Hook</h4><p>&emsp;&emsp;为了有时机污染内核栈，我Hook 了KiFastCallEntry ， 在每个系统调用发生时，污染当前栈以下剩余栈空间。 </p><p><img src="KiFastCallEntryHook.png" alt="">     </p><p>&emsp;&emsp;首先使用 <strong>IoGetStackLimits</strong> 获取当前线程的范围，然后从栈底部到当前栈位置的整个空间都被填充为0xAA 。<br>这样进入系统调用之后，凡是内核堆栈上的局部变量的内容，都会被污染成0xAA。         </p><h3 id="污染内核POOL"><a href="#污染内核POOL" class="headerlink" title="污染内核POOL"></a>污染内核POOL</h3><p>&emsp;&emsp;类似的，对于动态分配的内存,我采用hook ExAllocatePoolWithTag等，并污染其POOL内容的方式。</p><p>&emsp;&emsp;这样，无论是栈上的，还是堆上的，只要是未初始化的，内容都被我们污染了。<br>如果这个内核堆栈变量没有正确的初始化，就有可能将这个magic value写入到用户态的内存。结合我们捕获的日志，就能马上发现这个信息泄漏。</p><p>为了排除掉巧合，使用了多次变换magic value 如 <strong>0xAAAAAAAA</strong> , <strong>0xBBBBBBBB</strong> 的办法来进行排除误报。 </p><p>排除干扰之后的一次典型的结果如下     </p><p><img src="magic.png" alt="">     </p><p>&emsp;&emsp;可以看到，在某次短暂的监控过程中，就抓到了系统里 <strong>161</strong> 次泄漏。<br>当然这没有排重，并不是有这么多个独立的漏洞，而是某些漏洞在反复的泄漏。<br>此时我们就抓到了一个真正的信息泄漏漏洞，有堆栈信息，再辅以简单的人工分析，就能知道细节，<br>这也是 <strong>CVE-2017-8482</strong> 背后的故事。   </p><h3 id="差异比对"><a href="#差异比对" class="headerlink" title="差异比对"></a>差异比对</h3><p>&emsp;&emsp;对于未初始化堆栈所导致的内核信息泄漏，我们可以用污染然后查找标记的方式发现。<br>对于直接泄漏了关键信息的，比如直接写入了模块，对象，POOL地址类型的，就不能用这种方法发现了。    </p><p>在系统运行过程中，内核本身就会频繁的向用户态写入数据，很多数据在内核地址范围内，但实际上并不是有效的地址，只是一种噪音数据。<br>这种噪音数据有很多，像字符串，像素，位置信息等都有可能恰好是一个内核地址，我们需要排除掉这些噪音，发现真正的泄漏。    </p><p>这里我们过滤出一部分有意义的地址，比如       </p><ol><li>模块地址，必须在内核模块地址范围内。        </li><li>object地址      </li><li>POOL地址   </li></ol><p>在环境改变，比如重启系统之后 ，必须还能在相同的位置泄漏相同类型的数据。    </p><p>在排除掉系统正常的功能如 <strong>NtQuerySystemInformation</strong> 之类的之后，得到的数据，可信度就非常高了。     </p><h3 id="泄漏模块地址"><a href="#泄漏模块地址" class="headerlink" title="泄漏模块地址"></a>泄漏模块地址</h3><p>以 <strong>CVE-2017-8485</strong> 为例，比对之后得到的结果    </p><p><img src="diff.png" alt="">    </p><p>&emsp;&emsp;可以看到，此时的结果就非常直观了，相同的堆栈来源在相同的位置下，都泄漏了<strong>nt!ObpReferenceObjectByHandleWithTag+0x19f</strong><br>这个地址。</p><p><img src="vul1_detail.png" alt="">     </p><h3 id="泄漏object地址"><a href="#泄漏object地址" class="headerlink" title="泄漏object地址"></a>泄漏object地址</h3><p>&emsp;&emsp;由于泄漏object地址和POOL地址的本月微软还没来得及出补丁，不能描述细节。          </p><p>可以看到其中的一个案例，某个函数泄漏一个相同object的地址。<br>值得一提的是，对于这种不是从堆栈上复制数据产生的泄漏，是无法用污染堆栈的方法发现的。       </p><p><img src="object.png" alt="">     </p><h2 id="最后"><a href="#最后" class="headerlink" title="最后"></a>最后</h2><p>&emsp;&emsp;可以看到，我们不需要专门的fuzz，仅仅依靠系统本身的运行产生的代码覆盖，就发现了这些漏洞。<br>任何程序的正常运行，都能提高这个覆盖率。<br>事实上，在实际的挖掘过程中，我仅仅使用了运行游戏和浏览器的办法就取得了良好的效果 , 一局游戏打完，十个内核洞也就挖到了。</p><p><img src="game.jpg" alt="">     </p><h2 id="本月案例"><a href="#本月案例" class="headerlink" title="本月案例"></a>本月案例</h2><h3 id="CVE-2017-8470"><a href="#CVE-2017-8470" class="headerlink" title="CVE-2017-8470"></a>CVE-2017-8470</h3><p><img src="CVE-2017-8470.png" alt="">   </p><h3 id="CVE-2017-8474"><a href="#CVE-2017-8474" class="headerlink" title="CVE-2017-8474"></a>CVE-2017-8474</h3><p><img src="CVE-2017-8474.png" alt="">    </p><h3 id="CVE-2017-8476"><a href="#CVE-2017-8476" class="headerlink" title="CVE-2017-8476"></a>CVE-2017-8476</h3><p><img src="CVE-2017-8476.png" alt="">   </p><h3 id="CVE-2017-8482"><a href="#CVE-2017-8482" class="headerlink" title="CVE-2017-8482"></a>CVE-2017-8482</h3><p><img src="CVE-2017-8482.png" alt="">   </p><h3 id="CVE-2017-8485"><a href="#CVE-2017-8485" class="headerlink" title="CVE-2017-8485"></a>CVE-2017-8485</h3><p><img src="CVE-2017-8485.png" alt="">    </p><hr>]]></content>
+    
+    <summary type="html">
+    
+      
+      
+        &lt;h2 id=&quot;前言&quot;&gt;&lt;a href=&quot;#前言&quot; class=&quot;headerlink&quot; title=&quot;前言&quot;&gt;&lt;/a&gt;前言&lt;/h2&gt;&lt;p&gt;&amp;emsp;&amp;emsp;2017年6月补丁日，修复了我们之前报告的6个内核信息泄漏漏洞 , 文章末尾有细节。&lt;br&gt;前年我演示过如何用JS来
+      
+    
+    </summary>
+    
+      <category term="vulnerability" scheme="https://io.tinysec.net/categories/vulnerability/"/>
+    
+    
+      <category term="kernel" scheme="https://io.tinysec.net/tags/kernel/"/>
+    
+      <category term="vulnerability" scheme="https://io.tinysec.net/tags/vulnerability/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>关于 fuzz 的一些思考</title>
+    <link href="https://io.tinysec.net/post/2016/10/about-fuzz/"/>
+    <id>https://io.tinysec.net/post/2016/10/about-fuzz/</id>
+    <published>2016-10-29T00:00:00.000Z</published>
+    <updated>2021-08-25T10:31:43.391Z</updated>
+    
+    <content type="html"><![CDATA[<p>&emsp;&emsp;fuzz ，一般翻译成 模糊测试。 这里面包含了两个方面，一是模糊，二是测试。<br>很多人的以为在于模糊就是fuzz的全部，以为随机化的数据，就是fuzz。其实，random != fuzz.<br>“测试” 才是核心， 随机化的数据，只是一种测试的手段。</p><p>&emsp;&emsp;既然是测试，测试什么呢？测试的其实是一种预期。 凡是与预期不一致的，都应该视为“异常”。<br>这里的“异常”，不一定会导致通常所见的crash，其实表现在逻辑层面，就是一些条件分支，<br>怎么捕获这些非传统类型的“异常” ， 也是一个好的fuzzer需要考虑的。  </p><p>&emsp;&emsp;通常，这种与预期的不一致，在软件层面，有些表现成为bug ，有一些是设计文档之外的副作用。<br>bug != vul ,一些漏洞虽然是一些简单的bug , 一些漏洞其实也是功能特性。   </p><p>&emsp;&emsp;这个测试的预期包括，设计上的预期和实现上的预期。<br>对于小规模的软件，也许能从设计上规避很多问题，但是对于大规模的软件，比如windows，<br>代码复杂度已经达到了设计者无法预期所有状态的地步。<br>大规模软件的分工协作开发，由于每个实现者的安全意识和水平不一致，也会导致设计者没有预料的问题。   </p><p>&emsp;&emsp;软件或者说单元之的执行流程，其实就是一个个状态机，数据的输入与输出解析，产生状态的转移。<br>当转移到某个状态没有被处理，或者处理不正确时，它就产生了前面所说的“异常”。   </p><p>&emsp;&emsp;软件系统的脆弱点，或者说漏洞的触发的源头，其实就在于对于外部数据的解析。<br>一切的外部输入都是有害的，当对软件黑盒测试的时候，关注点就可以放在数据的整个生命周期上。<br>数据从哪里产生，怎么传输，在哪里解析，在哪里释放。<br>在fuzz的时候，我们一般只需要关心在哪里解析就可以了，<br>只有后期利用的时候，才需要关心在哪里产生等问题。   </p><p>&emsp;&emsp;数据格式越复杂，整个熵值越高，解析就越容易出错。制造足够的复杂度，也是fuzzer的武器，<br>制造复杂度，最容易想到的就是随机化 。<br>纯粹的随机化是没什么意义的，往往会被第一层的校验就挡住，所以就需要拆分成最小单元来测试。   </p><p>&emsp;&emsp;所谓的最小测试单元法则，就是不要把整个系统带着一块测试，而是需要测试哪个单元，就把那个单元单独提取出来测试。<br>这个最小单元粒度上可以是模块，区段，函数，甚至是基本块。<br>分层的具体体现方法很多，比如对于进程的测试，我们可以注入代码，进行内存测试。<br>对于内核的测试，我们可以加载驱动，采用直接调用的方式测试。    </p><p>&emsp;&emsp;分层是一个很重要的思路，第三方的单元，无论是代码注入，内核直接调用，其实都是给了黑盒代码一个适配中间层。<br>让我们的异常数据得以绕过那些不必要的检查，直接传递到解析模块。   </p><p>比如 syscall 通常有usermode 的stub ,在这些stub里本身进行了很多检查和校验，但其实这些校验是可以绕过的，<br>直接syscall的方式，就相当于在你的fuzzer代码和目标内核本身，加了一个适配层，辅助数据的传递。    </p><p>对于内核涉及到格式解析的，我们甚至可以用分层和单元化的思想，单独提取解析部分的代码，<br>直接在用户态以函数的形式来测试这部分代码，加快速度。    </p><p>面对一个大型的黑盒系统，fuzzer的时间成本很高 , 所以我们尽可能的节约自己的时间，但是信息收集这部分<br>的时间必不可少，俗称“踩点” ，了解系统在哪里解析外部的数据，怎样用分层的思想，直接的测试这个子系统。    </p><p>整个流程就是，  </p><ul><li>掘黑盒系统里解析外部数据的子系统，</li><li>分层化测试这个子系统</li><li>获系统由于解析产生的“异常” </li><li>分析这些异常。</li></ul><p>但由于时间成本的关系， 通常只会关心一些具体的表现，比如 调试器捕获的中断，verifier捕获的BSOD。</p><p>好的fuzzer的评判标准。</p><ul><li>良好的覆盖率。<br>覆盖率是后面一切测试的保证，怎么保证覆盖率，又可以说几天了，这里不展开。  </li><li>匪夷所思与众不同丧心病狂的思路与测试点。<br> 土豪如google和MS，可以拼机器。穷人只能想奇技淫巧。</li><li>日志记录与重放系统。<br>将运行时产生的日志，直接重放，就是一个没有精简过的POC。   </li><li>非传统异常类型的捕获。<br>也就是说，将本来不能捕获的异常，想办法知道。也就是 PIN 和 DigTool 的部分。<br>如果还能即时的反馈给fuzzer系统，那覆盖率就更高了。 </li><li>自身的流程可控。<br>fuzzer本身也要对自身的执行状态，高度可控制。以便处理callback类型的fuzz。</li></ul><p>&emsp;&emsp;js-kernel-fuzzer 目前只做到了第三点，和部分的第四点，还需要更多的改进。<br>用的还是比较笨的IDA逆向的办法，提高覆盖率，如果你有好办法，恳请告知。    </p><p>其他的非必须，但是也是很有用的部分。   </p><ul><li>可拆分成单元测试，以支持分布式的fuzz.   </li><li>配合重放系统和虚拟机的所做的自动化精简系统。<br>js-kernel-fuzzer 目前还是笨办法，人工在精简 , 每次都费时费力的精简之后才发给MSRC , 期望有时间能做下这个。   </li></ul><p>&emsp;&emsp;总结，fuzz是一个很有用的方法，也是一种很复杂的思路。<br>各个厂商自己也越来越重视fuzz , 以后挖掘的难度也会越来越高。<br>以上，只是自己挖掘的一点浅显的总结。    </p><p>当你觉得已经理解了fuzz时，再好好想想 , 也许有更多的收获。</p>]]></content>
+    
+    <summary type="html">
+    
+      
+      
+        &lt;p&gt;&amp;emsp;&amp;emsp;fuzz ，一般翻译成 模糊测试。 这里面包含了两个方面，一是模糊，二是测试。&lt;br&gt;很多人的以为在于模糊就是fuzz的全部，以为随机化的数据，就是fuzz。其实，random != fuzz.&lt;br&gt;“测试” 才是核心， 随机化的数据，只是一种测试
+      
+    
+    </summary>
+    
+      <category term="vulnerability" scheme="https://io.tinysec.net/categories/vulnerability/"/>
+    
+    
+      <category term="vulnerability" scheme="https://io.tinysec.net/tags/vulnerability/"/>
+    
+      <category term="fuzz" scheme="https://io.tinysec.net/tags/fuzz/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Fuzz Windows Kernel Via Javascript</title>
+    <link href="https://io.tinysec.net/post/2016/02/fuzz-windows-kernel-via-javascript/"/>
+    <id>https://io.tinysec.net/post/2016/02/fuzz-windows-kernel-via-javascript/</id>
+    <published>2016-02-21T00:00:00.000Z</published>
+    <updated>2021-08-25T10:31:43.387Z</updated>
+    
+    <content type="html"><![CDATA[<p>&emsp;&emsp;微软在今年2月和3月补了我去年年底报的2个win32k里的漏洞MS16-018/CVE-2016-0048 ,M16-034/CVE-2016-0096,</p><p>关于这2个漏洞的细节，各位同学有兴趣可以Diff一下,今天这篇不写.</p><p>对于这两个漏洞的背后的小故事,倒是有点意思。</p><p>fuzz的过程中，频繁的修改fuzzer代码，并验证思路是很普遍的过程。</p><p>为了保证fuzz环境的干净，虚拟机里没有安装任何第三方软件。所以</p><p>每次在物理机里修改完fuzzer代码,然后编译，然后传输到虚拟机里，是一件烦琐又低效的事情。</p><p>最开始fuzzer都是用C写的，所以在虚拟机里也装了一套WDK的编译环境，然后每次需要验证思路时，在虚拟机里，用Notepad++直接修改fuzzer代码，用WDK编译，执行结果。</p><p>&emsp;&emsp;去年8月初，无意间发现了微软的Chakra这个js引擎，</p><p>既然V8可以用来做nodejs, 辅助后端开发。</p><p>何不用用js来写fuzzer,语法和C很接近，想必修改代码起来会很方便， 移植之前c写的fuzzer也会很容易。</p><p>于是开始研究Chakra 的文档，这就是后来的JSRT项目, 意思是 Javascript Runtime ,</p><p>&emsp;&emsp;Chakra 本身只是一个基本js引擎，只能能执行基本的表达式。</p><p>在MS的文档里，对于只是想用js来作为插件语言的软件，给需要提供的SDK函数每一个都写一个包装函数，用JsCreateFunction注册后，js即可调用。</p><p>&emsp;&emsp;但是我的目标是用js来Fuzz内核，面对的是整个操作系统，win32的api函数太多了，不可能给每个函数都写一个c的包装函数，给js调用。</p><p>于是想到一些tips 来hack 这个过程。</p><p>由于js没有指针类型，而很多api函数都是需要传递指针类型的参数，这就需要让js具备直接操作内存的能力，对于指针本身，使用js里的整数来模拟。</p><p>使用c提供malloc/free, getCHAR…setULONG,等函数，js就能直接读写内存。</p><p>为了获取函数地址，首先得知道模块地址，所以我提供了LoadLibrary、GetModuleHandle</p><p>然后在GetProcAddress的帮助下，就能获取任意函数的地址。</p><p>具备了直接读写内存的能力，再加上函数地址的获取，就能直接的调用api了。</p><p>比如对于2个参数个数的stdcall类型函数，可以抽象为，</p><pre><code>RoutineResult = ((LPFN_STDCALL2Param)(RoutineAddress))(ArgArray[0], ArgArray[1]);</code></pre><p>在 js 层 获取都是 DWORD类型的返回值，然后，手动转换成js类型即可。</p><p>&emsp;&emsp;对于参数比较简单的函数，如Beep，参数类型都是数值，很好处理。</p><p>但是对于 EnumWindow 这种，需要提供一个回掉函数作为参数。</p><p>就需要完成 js-&gt;c -&gt; js 跨语言的过程。</p><p>&emsp;&emsp;对于js-&gt;c 比较好理解，但是c -&gt; js 这个过程就有点麻烦了。</p><p>因为在 c-&gt;js 的过程中，除了js所需要的参数，还得传递Charka需要的当前Context等信息。</p><p>后来想到使用Thunk的思路，使用asm 来重新布局 栈上的参数，额外的传递 Chakra所需要的Runtime Context 信息， 当前js对象信息，和js 回掉函数对象。</p><p>&emsp;&emsp;这样，在C层面，只提供最小的辅助给Chakra，就能让js能直接跨语言调用所有api.</p><p>事实证明，这套JSRT还是很方便的。</p><p>比如在 调用 ShadowSSDT 里的函数时，无需定义参数原型，直接使用</p><p>function NtGdiAngleArc( arg_01,  arg_02 ,  arg_03,  arg_04 ,  arg_05,  arg_06 )<br>{</p><pre><code>return Invoke( W32pServiceTable[&quot;NtGdiAngleArc&quot;] , arg_01,  arg_02 ,  arg_03,  arg_04 ,  arg_05,  arg_06 );</code></pre><p>}</p><p>就能方便的调用任意SDT函数。</p><p>&emsp;&emsp;光有这些还不够，还需要一个js的基本库来辅助调用，比如js本身没有printf函数，等等。</p><p>期间因为频繁的被业务模块维护打断，断断续续的写了几个月。</p><p>&emsp;&emsp;去年11月初，因为某比赛的原因，切换目标到win32k, 刚好来验证这套环境的效果和方便性。</p><p>于是有了后来的 CVE-2016-0096 ，可能是第一个用js fuzz出来的内核洞。</p><p>蓝屏时，就可以看到一个很有意思的栈，从jscript一路到内核。</p><p><img src="jsfuzz.jpg" alt=""></p>]]></content>
+    
+    <summary type="html">
+    
+      
+      
+        &lt;p&gt;&amp;emsp;&amp;emsp;微软在今年2月和3月补了我去年年底报的2个win32k里的漏洞MS16-018/CVE-2016-0048 ,M16-034/CVE-2016-0096,&lt;/p&gt;
+&lt;p&gt;关于这2个漏洞的细节，各位同学有兴趣可以Diff一下,今天这篇不写.&lt;/p&gt;
+&lt;
+      
+    
+    </summary>
+    
+      <category term="vulnerability" scheme="https://io.tinysec.net/categories/vulnerability/"/>
+    
+    
+      <category term="kernel" scheme="https://io.tinysec.net/tags/kernel/"/>
+    
+      <category term="vulnerability" scheme="https://io.tinysec.net/tags/vulnerability/"/>
+    
+      <category term="javascript" scheme="https://io.tinysec.net/tags/javascript/"/>
+    
+      <category term="chakra" scheme="https://io.tinysec.net/tags/chakra/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Hello World</title>
+    <link href="https://io.tinysec.net/post/2006/09/hello-world/"/>
+    <id>https://io.tinysec.net/post/2006/09/hello-world/</id>
+    <published>2006-09-01T00:00:00.000Z</published>
+    <updated>2021-08-25T10:31:43.387Z</updated>
+    
+    <content type="html"><![CDATA[<p>hi!</p>]]></content>
+    
+    <summary type="html">
+    
+      
+      
+        &lt;p&gt;hi!&lt;/p&gt;
+
+      
+    
+    </summary>
+    
+      <category term="unknown" scheme="https://io.tinysec.net/categories/unknown/"/>
+    
+    
+      <category term="test" scheme="https://io.tinysec.net/tags/test/"/>
+    
+  </entry>
+  
+</feed>

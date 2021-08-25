@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<html class="theme-next mist" lang="en">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2"/>
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+  
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=6.3.0" rel="stylesheet" type="text/css" />
+
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.ico?v=6.3.0">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon.ico?v=6.3.0">
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Mist',
+    version: '6.3.0',
+    sidebar: {"display":"remove","offset":12,"b2t":true,"scrollpercent":true,"onmobile":false},
+    fancybox: false,
+    fastclick: false,
+    lazyload: false,
+    tabs: true,
+    motion: {"enable":false,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+  
+
+
+
+
+  <meta name="description" content="TL;DR&amp;emsp;&amp;emsp;This Patch-Tuesday MS fixed 6 kernel information leak vulnerabilities reported by us, the details are at the end of this article.I had already show how to fuzz the windows kernel via">
+<meta name="keywords" content="kernel,vulnerability">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Automatically Discovering Windows Kernel Information Leak Vulnerabilities">
+<meta property="og:url" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/index.html">
+<meta property="og:site_name" content="TinyBlog">
+<meta property="og:description" content="TL;DR&amp;emsp;&amp;emsp;This Patch-Tuesday MS fixed 6 kernel information leak vulnerabilities reported by us, the details are at the end of this article.I had already show how to fuzz the windows kernel via">
+<meta property="og:locale" content="en">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/DigTool.png">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/loader.png">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/analyze.png">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/log.png">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/KiFastCallEntryHook.png">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/magic.png">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/diff.png">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/vul1_detail.png">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/object.png">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/game.jpg">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/CVE-2017-8470.png">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/CVE-2017-8474.png">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/CVE-2017-8476.png">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/CVE-2017-8482.png">
+<meta property="og:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/CVE-2017-8485.png">
+<meta property="og:updated_time" content="2021-08-25T10:31:43.391Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Automatically Discovering Windows Kernel Information Leak Vulnerabilities">
+<meta name="twitter:description" content="TL;DR&amp;emsp;&amp;emsp;This Patch-Tuesday MS fixed 6 kernel information leak vulnerabilities reported by us, the details are at the end of this article.I had already show how to fuzz the windows kernel via">
+<meta name="twitter:image" content="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/DigTool.png">
+
+
+
+  <link rel="alternate" href="/atom.xml" title="TinyBlog" type="application/atom+xml" />
+
+
+
+
+  <link rel="canonical" href="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/"/>
+
+
+
+<script type="text/javascript" id="page.configurations">
+  CONFIG.page = {
+    sidebar: "",
+  };
+</script>
+
+  <title>Automatically Discovering Windows Kernel Information Leak Vulnerabilities | TinyBlog</title>
+  
+
+
+
+
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-114832940-3"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-114832940-3');
+</script>
+
+
+
+
+
+
+  <noscript>
+  <style type="text/css">
+    .use-motion .motion-element,
+    .use-motion .brand,
+    .use-motion .menu-item,
+    .sidebar-inner,
+    .use-motion .post-block,
+    .use-motion .pagination,
+    .use-motion .comments,
+    .use-motion .post-header,
+    .use-motion .post-body,
+    .use-motion .collection-title { opacity: initial; }
+
+    .use-motion .logo,
+    .use-motion .site-title,
+    .use-motion .site-subtitle {
+      opacity: initial;
+      top: initial;
+    }
+
+    .use-motion {
+      .logo-line-before i { left: initial; }
+      .logo-line-after i { right: initial; }
+    }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="en">
+
+  
+  
+
+  <div class="container  page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/" class="brand" rel="start">
+        <!-- <span class="logo-line-before"><i></i></span> -->
+        <span class="site-title">TinyBlog</span>
+        <!--  <span class="logo-line-after"><i></i></span>  -->
+      </a>
+    </div>
+    
+      
+        <h1 class="site-subtitle" itemprop="description">TinySec's blog</h1>
+      
+    
+  </div>
+
+  <div class="site-nav-toggle">
+    <button aria-label="Toggle navigation bar">
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  
+    <ul id="menu" class="menu">
+      
+        
+        
+        
+          
+          <li class="menu-item menu-item-home">
+    <a href="/" rel="section">
+      <i class="menu-item-icon fa fa-fw fa-home"></i> <br />Home</a>
+  </li>
+        
+        
+        
+          
+          <li class="menu-item menu-item-archives">
+    <a href="/archives" rel="section">
+      <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />Archives</a>
+  </li>
+        
+        
+        
+          
+          <li class="menu-item menu-item-about">
+    <a href="/about" rel="section">
+      <i class="menu-item-icon fa fa-fw fa-user"></i> <br />About</a>
+  </li>
+
+      
+      
+    </ul>
+  
+
+  
+    
+
+  
+
+  
+</nav>
+
+
+
+  
+
+
+
+</div>
+    </header>
+
+    
+
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="https://io.tinysec.net/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_en/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="TinySec">
+      <meta itemprop="description" content="TinySec's blog">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="TinyBlog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h2 class="post-title" itemprop="name headline">Automatically Discovering Windows Kernel Information Leak Vulnerabilities
+              
+            
+          </h2>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+
+            
+            
+            
+
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+
+              
+                
+              
+
+              <time title="Created: 2017-06-14 00:00:00" itemprop="dateCreated datePublished" datetime="2017-06-14T00:00:00Z">2017-06-14</time>
+            
+
+            
+          </span>
+
+          
+            <span class="post-category" >
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">In</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing"><a href="/categories/vulnerability/" itemprop="url" rel="index"><span itemprop="name">vulnerability</span></a></span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <h2 id="TL-DR"><a href="#TL-DR" class="headerlink" title="TL;DR"></a>TL;DR</h2><p>&emsp;&emsp;This Patch-Tuesday MS fixed 6 kernel information leak vulnerabilities reported by us, the details are at the end of this article.<br>I had already show how to fuzz the windows kernel via JS , today we will introduce a new method to discover windows kernel vulnerabilities automatically without fuzzing.<br>I selected a small part from the work in the past few months to spread out this topic.</p>
+<h2 id="KASLR"><a href="#KASLR" class="headerlink" title="KASLR"></a>KASLR</h2><p>&emsp;&emsp;In Windows Vista and above, Microsoft enable Kernel Address Space Layout Randomization (KASLR) by default to prevent exploitation by placing various objects at random addresses, rather than fixed ones. It is an effective method against exploitation using Return-oriented Programming (ROP) attack.     </p>
+<p>&emsp;&emsp;Beginning with Windows 8, KASLR is enhanced with a newly introduced function ExIsRestrictedCaller.<br> Programs under medium integrity are not able to invoke functions such as NtQuerySystemInformation to obtain addresses of kernel modules, kernel objects or pools.      </p>
+<p>The functions include but not limited to:</p>
+<h3 id="NtQuerySystemInformation"><a href="#NtQuerySystemInformation" class="headerlink" title="NtQuerySystemInformation"></a>NtQuerySystemInformation</h3><pre><code>* SystemModuleInformation 
+* SystemModuleInformationEx 
+* SystemLocksInformation 
+* SystemStackTraceInformation 
+* SystemHandleInformation 
+* SystemExtendedHandleInformation 
+* SystemObjectInformation 
+* SystemBigPoolInformation 
+* SystemSessionBigPoolInformation 
+* SystemProcessInformation
+* SystemFullProcessInformation
+</code></pre><h3 id="NtQueryInfomationThread"><a href="#NtQueryInfomationThread" class="headerlink" title="NtQueryInfomationThread"></a>NtQueryInfomationThread</h3><h3 id="NtQueryInfomationProcess"><a href="#NtQueryInfomationProcess" class="headerlink" title="NtQueryInfomationProcess"></a>NtQueryInfomationProcess</h3><p>The above is the traditional way to get the kernel module address and kernel object address, as the kernel normal feature.<br>But after win8, low integrity application will fail in calling these functions.     </p>
+<p>&emsp;&emsp;In order to bypass KASLR, a direct countermeasure is to discover vulnerabilities that leak valuable information from the kernel mode to calculate the address of kernel module or kernel object.     </p>
+<h2 id="Kernel-Information-Leak"><a href="#Kernel-Information-Leak" class="headerlink" title="Kernel Information Leak"></a>Kernel Information Leak</h2><p>&emsp;&emsp;As a kind of kernel vulnerability, it has its own uniqueness. For example, for the traditional memory damage vulnerabilities, the vulnerability itself will affect the running of the kernel. With the help of verifier and other tools, you can easily capture this exception among the normal traffic.<br>But the kernel information leak vulnerability does not trigger any exception, nor does it affect the running of the kernel, which makes it more difficult to be discovered.<br>Vulnerabilities objectively exist, what we need to do is to find them at lowest cost.      </p>
+<h2 id="Discover-ideas"><a href="#Discover-ideas" class="headerlink" title="Discover ideas"></a>Discover ideas</h2><p>&emsp;&emsp;When kernel information leak vulnerability occurs, the kernel will certainly write some valuable data to the user buffer.<br>So if we monitor all the writing behaviors to user buffer in the kernel, we will be able to find them.      </p>
+<p>Of course, the system does not provide this feature.<br>I capture the process with the help of a hardware virtualization based framework of pjf,<br>who is the author of the famous windows kernel anti-rootkit tool named iceSword. </p>
+<p><img src="DigTool.png" alt="">            </p>
+<p>In order not to affect the dest system itself, I monitored in the VMWARE guest and write some log files, and then further analyze them in the host system.  </p>
+<p><img src="loader.png" alt="">     </p>
+<p>In the host machine, after decoding and analyzing the logs:  </p>
+<p><img src="analyze.png" alt="">    </p>
+<p>Then we have the human-readable logs: </p>
+<p><img src="log.png" alt="">       </p>
+<h2 id="Further-Analysis"><a href="#Further-Analysis" class="headerlink" title="Further Analysis"></a>Further Analysis</h2><p>&emsp;&emsp;Now we have operation records in user memory buffer written by kernel.<br>Most of them are just normal functions.     </p>
+<p>We need remove nosiy data to find out the key information.<br>Two skills are needed.     </p>
+<h3 id="Poison-the-kernel-stack"><a href="#Poison-the-kernel-stack" class="headerlink" title="Poison the kernel stack"></a>Poison the kernel stack</h3><p>&emsp;&emsp;Poisoning or polluting the target is a common idea.<br>At network penetration testing, there are also ARP and DNS cache poisoning.       </p>
+<p>Here is the kernel stack poisoning, refers to the pollution to the entire unused kernel stack space.     </p>
+<p>If a variable on a kernel stack is not initialized, then when this variable is written to the user buffer, there will be a magic value in the record written by me. Wherever these is a magic value, there is a leak.        </p>
+<p>I noticed that j00ru also used similar techniques in his BochsPwn project.        </p>
+<h4 id="KiFastCallEntry-Hook"><a href="#KiFastCallEntry-Hook" class="headerlink" title="KiFastCallEntry Hook"></a>KiFastCallEntry Hook</h4><p>&emsp;&emsp;In order to poison the kernel stack, I hooked nt!KiFastCallEntry.<br>So that when a syscall invoked, I can poisoning the entire unused kernel stack space.  </p>
+<p><img src="KiFastCallEntryHook.png" alt="">      </p>
+<p>Firstly, I used <strong> IoGetStackLimits </strong> to get the current thread stack range, and then from the bottom of the stack to the current stack location of the entire space are filled with 0xAA.     </p>
+<p>So when I entered the syscall, all the contents of the local variables on the kernel stack will be filled into 0xAA.       </p>
+<h3 id="Poison-the-kernel-pool"><a href="#Poison-the-kernel-pool" class="headerlink" title="Poison the kernel pool"></a>Poison the kernel pool</h3><p>&emsp;&emsp;Similarly, for dynamically allocated memory, I used hook <strong>nt!ExAllocatePoolWithTag</strong> and so on, and polluted its POOL content.</p>
+<p>If the kernel stack/heap variable is not properly initialized, it is possible to write this magic value to the user buffer.   </p>
+<p>With the help of the logs we captured, we can immediately find this vulnerability.<br>In order to remove the coincidence, I also used a number of magic value such as <strong>0xAAAAAAAA</strong> , <strong>0xBBBBBBB</strong> to exclude false positives.       </p>
+<p>A typical result after excluding the interference is as follows.    </p>
+<p><img src="magic.png" alt="">      </p>
+<p>&emsp;&emsp;You can see that in a short monitoring process, it caught the <strong> 161 </strong> leaks in the system!<br>Of course, this is not exhaustive. There are not so many independent vulnerabilities, but some vulnerabilities made repeated leaks.       </p>
+<p>At this point we caught a real information leak vulnerability, there is stack information, supplemented by a simple manual analysis, we can got the details.<br>This is also the story behind the <strong>CVE-2017-8482</strong>.     </p>
+<h3 id="Difference-comparison"><a href="#Difference-comparison" class="headerlink" title="Difference comparison"></a>Difference comparison</h3><p>&emsp;&emsp;For the kernel information leak caused by the uninitialized stack, we can poison them at first and then find them.<br>But for the direct disclosure of key information, such as the module and the object address written directly, it cannot be found in this way.      </p>
+<p>In the process of the system running, the kernel itself will frequently write data to the user buffer, a lot of data is in the kernel address range, but in fact it is not a valid address, but a noise data.<br>There are many such noise data, such as strings, pixels, rect, region, etc. which are likely happen to be a kernel address. We need to rule out the noise and found a real leak.      </p>
+<p>Here we filter out some meaningful addresses, such as:     </p>
+<ol>
+<li>Module address, must be inside in the system module list     </li>
+<li>object address    </li>
+<li>POOL address   </li>
+</ol>
+<p>After the environment changes, such as restarting the system,  it must be able to leak the same type of data at the same location.     </p>
+<p>After the exclusion of the normal function of the system, such as <strong>NtQuerySystemInformation</strong> and similar functions, the left data’s credibility is very high.    </p>
+<h3 id="The-leak-of-module-address"><a href="#The-leak-of-module-address" class="headerlink" title="The leak of module address"></a>The leak of module address</h3><p>For example <strong>CVE-2017-8485</strong>   </p>
+<p><img src="diff.png" alt="">    </p>
+<p>You can see that the results at this time is very obvious - the same stack, the same location, are leaked <strong>nt! ObpReferenceObjectByHandleWithTag + 0x19f</strong>    </p>
+<p><img src="vul1_detail.png" alt="">    </p>
+<h3 id="The-leak-of-object-address"><a href="#The-leak-of-object-address" class="headerlink" title="The leak of object address"></a>The leak of object address</h3><p>Due to leakage of object address and POOL address not fixed by Microsoft this month, I cannot describe the details.  </p>
+<p><img src="object.png" alt="">    </p>
+<h2 id="More"><a href="#More" class="headerlink" title="More"></a>More</h2><p>You can see that we do not need a fuzzer, only through the code coverage generated by normal running of the system itself, we found these vulnerabilities.<br>Any normal program running can improve this coverage.<br>In fact, in the actual work, I only use the game and the browser to improve coverage and got good results.<br>A game finished, ten kernel vulnerabilities on the hand.</p>
+<p><img src="game.jpg" alt="">     </p>
+<h2 id="The-case-of-this-month"><a href="#The-case-of-this-month" class="headerlink" title="The case of this month"></a>The case of this month</h2><h3 id="CVE-2017-8470"><a href="#CVE-2017-8470" class="headerlink" title="CVE-2017-8470"></a>CVE-2017-8470</h3><p><img src="CVE-2017-8470.png" alt="">   </p>
+<h3 id="CVE-2017-8474"><a href="#CVE-2017-8474" class="headerlink" title="CVE-2017-8474"></a>CVE-2017-8474</h3><p><img src="CVE-2017-8474.png" alt="">   </p>
+<h3 id="CVE-2017-8476"><a href="#CVE-2017-8476" class="headerlink" title="CVE-2017-8476"></a>CVE-2017-8476</h3><p><img src="CVE-2017-8476.png" alt="">    </p>
+<h3 id="CVE-2017-8482"><a href="#CVE-2017-8482" class="headerlink" title="CVE-2017-8482"></a>CVE-2017-8482</h3><p><img src="CVE-2017-8482.png" alt="">    </p>
+<h3 id="CVE-2017-8485"><a href="#CVE-2017-8485" class="headerlink" title="CVE-2017-8485"></a>CVE-2017-8485</h3><p><img src="CVE-2017-8485.png" alt="">    </p>
+
+      
+    </div>
+
+    
+
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/kernel/" rel="tag"># kernel</a>
+          
+            <a href="/tags/vulnerability/" rel="tag"># vulnerability</a>
+          
+        </div>
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_zh/" rel="next" title="自动化挖掘 windows 内核信息泄漏漏洞">
+                <i class="fa fa-chevron-left"></i> 自动化挖掘 windows 内核信息泄漏漏洞
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+  </div>
+
+
+          </div>
+          
+
+  
+
+
+
+        </div>
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; 2006 – <span itemprop="copyrightYear">2021</span>
+
+  <span class="with-love" id="animate">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="https://io.tinysec.net"> Home  </a> </span>
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-address-card"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="mailto:tinyxc@gmail.com"> E-mail </a> </span>
+  
+
+  <span class="with-love" id="animate">
+    <i class="fa fa-github"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="https://github.com/tinysec"> Github </a> </span>
+  
+ 
+  <span class="with-love" id="animate">
+    <i class="fa fa-twitter"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="https://twitter.com/TinySecEx"> Twitter </a> </span>
+  
+	<!--
+  <span class="with-love" id="animate">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/about"> About </a> </span>
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-bug"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/vulnerability"> Vulnerability </a> </span>
+  
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-archive"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/archives"> Archives </a> </span>
+  
+  -->
+  <span class="with-love" id="animate">
+    <i class="fa fa-book"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/atom.xml"> RSS </a> </span>
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-sitemap"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/sitemap.xml"> Sitemap </a> </span>
+  
+  
+  <!-- links -->
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-briefcase"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="https://www.iceswordlab.com"> IceSword Lab </a> </span>
+
+  
+
+  
+</div>
+
+
+  
+
+
+
+
+
+
+
+
+
+
+        
+
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+
+    
+	
+    
+
+    
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/velocity/2.0.5/velocity.min.js"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/velocity/2.0.5/velocity.ui.min.js"></script>
+  
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=6.3.0"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=6.3.0"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=6.3.0"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=6.3.0"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=6.3.0"></script>
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<html class="theme-next mist" lang="en">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2"/>
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+  
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=6.3.0" rel="stylesheet" type="text/css" />
+
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.ico?v=6.3.0">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon.ico?v=6.3.0">
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Mist',
+    version: '6.3.0',
+    sidebar: {"display":"remove","offset":12,"b2t":true,"scrollpercent":true,"onmobile":false},
+    fancybox: false,
+    fastclick: false,
+    lazyload: false,
+    tabs: true,
+    motion: {"enable":false,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+  
+
+
+
+
+  <meta name="description" content="&amp;emsp;&amp;emsp;fuzz ，一般翻译成 模糊测试。 这里面包含了两个方面，一是模糊，二是测试。很多人的以为在于模糊就是fuzz的全部，以为随机化的数据，就是fuzz。其实，random != fuzz.“测试” 才是核心， 随机化的数据，只是一种测试的手段。 &amp;emsp;&amp;emsp;既然是测试，测试什么呢？测试的其实是一种预期。 凡是与预期不一致的，都应该视为“异常”。这里的“异常”，不一">
+<meta name="keywords" content="vulnerability,fuzz">
+<meta property="og:type" content="article">
+<meta property="og:title" content="关于 fuzz 的一些思考">
+<meta property="og:url" content="https://io.tinysec.net/post/2016/10/about-fuzz/index.html">
+<meta property="og:site_name" content="TinyBlog">
+<meta property="og:description" content="&amp;emsp;&amp;emsp;fuzz ，一般翻译成 模糊测试。 这里面包含了两个方面，一是模糊，二是测试。很多人的以为在于模糊就是fuzz的全部，以为随机化的数据，就是fuzz。其实，random != fuzz.“测试” 才是核心， 随机化的数据，只是一种测试的手段。 &amp;emsp;&amp;emsp;既然是测试，测试什么呢？测试的其实是一种预期。 凡是与预期不一致的，都应该视为“异常”。这里的“异常”，不一">
+<meta property="og:locale" content="en">
+<meta property="og:updated_time" content="2021-08-25T10:31:43.391Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="关于 fuzz 的一些思考">
+<meta name="twitter:description" content="&amp;emsp;&amp;emsp;fuzz ，一般翻译成 模糊测试。 这里面包含了两个方面，一是模糊，二是测试。很多人的以为在于模糊就是fuzz的全部，以为随机化的数据，就是fuzz。其实，random != fuzz.“测试” 才是核心， 随机化的数据，只是一种测试的手段。 &amp;emsp;&amp;emsp;既然是测试，测试什么呢？测试的其实是一种预期。 凡是与预期不一致的，都应该视为“异常”。这里的“异常”，不一">
+
+
+
+  <link rel="alternate" href="/atom.xml" title="TinyBlog" type="application/atom+xml" />
+
+
+
+
+  <link rel="canonical" href="https://io.tinysec.net/post/2016/10/about-fuzz/"/>
+
+
+
+<script type="text/javascript" id="page.configurations">
+  CONFIG.page = {
+    sidebar: "",
+  };
+</script>
+
+  <title>关于 fuzz 的一些思考 | TinyBlog</title>
+  
+
+
+
+
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-114832940-3"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-114832940-3');
+</script>
+
+
+
+
+
+
+  <noscript>
+  <style type="text/css">
+    .use-motion .motion-element,
+    .use-motion .brand,
+    .use-motion .menu-item,
+    .sidebar-inner,
+    .use-motion .post-block,
+    .use-motion .pagination,
+    .use-motion .comments,
+    .use-motion .post-header,
+    .use-motion .post-body,
+    .use-motion .collection-title { opacity: initial; }
+
+    .use-motion .logo,
+    .use-motion .site-title,
+    .use-motion .site-subtitle {
+      opacity: initial;
+      top: initial;
+    }
+
+    .use-motion {
+      .logo-line-before i { left: initial; }
+      .logo-line-after i { right: initial; }
+    }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="en">
+
+  
+  
+
+  <div class="container  page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/" class="brand" rel="start">
+        <!-- <span class="logo-line-before"><i></i></span> -->
+        <span class="site-title">TinyBlog</span>
+        <!--  <span class="logo-line-after"><i></i></span>  -->
+      </a>
+    </div>
+    
+      
+        <h1 class="site-subtitle" itemprop="description">TinySec's blog</h1>
+      
+    
+  </div>
+
+  <div class="site-nav-toggle">
+    <button aria-label="Toggle navigation bar">
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  
+    <ul id="menu" class="menu">
+      
+        
+        
+        
+          
+          <li class="menu-item menu-item-home">
+    <a href="/" rel="section">
+      <i class="menu-item-icon fa fa-fw fa-home"></i> <br />Home</a>
+  </li>
+        
+        
+        
+          
+          <li class="menu-item menu-item-archives">
+    <a href="/archives" rel="section">
+      <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />Archives</a>
+  </li>
+        
+        
+        
+          
+          <li class="menu-item menu-item-about menu-item-active">
+    <a href="/about" rel="section">
+      <i class="menu-item-icon fa fa-fw fa-user"></i> <br />About</a>
+  </li>
+
+      
+      
+    </ul>
+  
+
+  
+    
+
+  
+
+  
+</nav>
+
+
+
+  
+
+
+
+</div>
+    </header>
+
+    
+
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="https://io.tinysec.net/post/2016/10/about-fuzz/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="TinySec">
+      <meta itemprop="description" content="TinySec's blog">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="TinyBlog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h2 class="post-title" itemprop="name headline">关于 fuzz 的一些思考
+              
+            
+          </h2>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+
+            
+            
+            
+
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+
+              
+                
+              
+
+              <time title="Created: 2016-10-29 00:00:00" itemprop="dateCreated datePublished" datetime="2016-10-29T00:00:00Z">2016-10-29</time>
+            
+
+            
+          </span>
+
+          
+            <span class="post-category" >
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">In</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing"><a href="/categories/vulnerability/" itemprop="url" rel="index"><span itemprop="name">vulnerability</span></a></span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>&emsp;&emsp;fuzz ，一般翻译成 模糊测试。 这里面包含了两个方面，一是模糊，二是测试。<br>很多人的以为在于模糊就是fuzz的全部，以为随机化的数据，就是fuzz。其实，random != fuzz.<br>“测试” 才是核心， 随机化的数据，只是一种测试的手段。</p>
+<p>&emsp;&emsp;既然是测试，测试什么呢？测试的其实是一种预期。 凡是与预期不一致的，都应该视为“异常”。<br>这里的“异常”，不一定会导致通常所见的crash，其实表现在逻辑层面，就是一些条件分支，<br>怎么捕获这些非传统类型的“异常” ， 也是一个好的fuzzer需要考虑的。  </p>
+<p>&emsp;&emsp;通常，这种与预期的不一致，在软件层面，有些表现成为bug ，有一些是设计文档之外的副作用。<br>bug != vul ,一些漏洞虽然是一些简单的bug , 一些漏洞其实也是功能特性。   </p>
+<p>&emsp;&emsp;这个测试的预期包括，设计上的预期和实现上的预期。<br>对于小规模的软件，也许能从设计上规避很多问题，但是对于大规模的软件，比如windows，<br>代码复杂度已经达到了设计者无法预期所有状态的地步。<br>大规模软件的分工协作开发，由于每个实现者的安全意识和水平不一致，也会导致设计者没有预料的问题。   </p>
+<p>&emsp;&emsp;软件或者说单元之的执行流程，其实就是一个个状态机，数据的输入与输出解析，产生状态的转移。<br>当转移到某个状态没有被处理，或者处理不正确时，它就产生了前面所说的“异常”。   </p>
+<p>&emsp;&emsp;软件系统的脆弱点，或者说漏洞的触发的源头，其实就在于对于外部数据的解析。<br>一切的外部输入都是有害的，当对软件黑盒测试的时候，关注点就可以放在数据的整个生命周期上。<br>数据从哪里产生，怎么传输，在哪里解析，在哪里释放。<br>在fuzz的时候，我们一般只需要关心在哪里解析就可以了，<br>只有后期利用的时候，才需要关心在哪里产生等问题。   </p>
+<p>&emsp;&emsp;数据格式越复杂，整个熵值越高，解析就越容易出错。制造足够的复杂度，也是fuzzer的武器，<br>制造复杂度，最容易想到的就是随机化 。<br>纯粹的随机化是没什么意义的，往往会被第一层的校验就挡住，所以就需要拆分成最小单元来测试。   </p>
+<p>&emsp;&emsp;所谓的最小测试单元法则，就是不要把整个系统带着一块测试，而是需要测试哪个单元，就把那个单元单独提取出来测试。<br>这个最小单元粒度上可以是模块，区段，函数，甚至是基本块。<br>分层的具体体现方法很多，比如对于进程的测试，我们可以注入代码，进行内存测试。<br>对于内核的测试，我们可以加载驱动，采用直接调用的方式测试。    </p>
+<p>&emsp;&emsp;分层是一个很重要的思路，第三方的单元，无论是代码注入，内核直接调用，其实都是给了黑盒代码一个适配中间层。<br>让我们的异常数据得以绕过那些不必要的检查，直接传递到解析模块。   </p>
+<p>比如 syscall 通常有usermode 的stub ,在这些stub里本身进行了很多检查和校验，但其实这些校验是可以绕过的，<br>直接syscall的方式，就相当于在你的fuzzer代码和目标内核本身，加了一个适配层，辅助数据的传递。    </p>
+<p>对于内核涉及到格式解析的，我们甚至可以用分层和单元化的思想，单独提取解析部分的代码，<br>直接在用户态以函数的形式来测试这部分代码，加快速度。    </p>
+<p>面对一个大型的黑盒系统，fuzzer的时间成本很高 , 所以我们尽可能的节约自己的时间，但是信息收集这部分<br>的时间必不可少，俗称“踩点” ，了解系统在哪里解析外部的数据，怎样用分层的思想，直接的测试这个子系统。    </p>
+<p>整个流程就是，  </p>
+<ul>
+<li>掘黑盒系统里解析外部数据的子系统，</li>
+<li>分层化测试这个子系统</li>
+<li>获系统由于解析产生的“异常” </li>
+<li>分析这些异常。</li>
+</ul>
+<p>但由于时间成本的关系， 通常只会关心一些具体的表现，比如 调试器捕获的中断，verifier捕获的BSOD。</p>
+<p>好的fuzzer的评判标准。</p>
+<ul>
+<li>良好的覆盖率。<br>覆盖率是后面一切测试的保证，怎么保证覆盖率，又可以说几天了，这里不展开。  </li>
+<li>匪夷所思与众不同丧心病狂的思路与测试点。<br> 土豪如google和MS，可以拼机器。穷人只能想奇技淫巧。</li>
+<li>日志记录与重放系统。<br>将运行时产生的日志，直接重放，就是一个没有精简过的POC。   </li>
+<li>非传统异常类型的捕获。<br>也就是说，将本来不能捕获的异常，想办法知道。也就是 PIN 和 DigTool 的部分。<br>如果还能即时的反馈给fuzzer系统，那覆盖率就更高了。 </li>
+<li>自身的流程可控。<br>fuzzer本身也要对自身的执行状态，高度可控制。以便处理callback类型的fuzz。</li>
+</ul>
+<p>&emsp;&emsp;js-kernel-fuzzer 目前只做到了第三点，和部分的第四点，还需要更多的改进。<br>用的还是比较笨的IDA逆向的办法，提高覆盖率，如果你有好办法，恳请告知。    </p>
+<p>其他的非必须，但是也是很有用的部分。   </p>
+<ul>
+<li>可拆分成单元测试，以支持分布式的fuzz.   </li>
+<li>配合重放系统和虚拟机的所做的自动化精简系统。<br>js-kernel-fuzzer 目前还是笨办法，人工在精简 , 每次都费时费力的精简之后才发给MSRC , 期望有时间能做下这个。   </li>
+</ul>
+<p>&emsp;&emsp;总结，fuzz是一个很有用的方法，也是一种很复杂的思路。<br>各个厂商自己也越来越重视fuzz , 以后挖掘的难度也会越来越高。<br>以上，只是自己挖掘的一点浅显的总结。    </p>
+<p>当你觉得已经理解了fuzz时，再好好想想 , 也许有更多的收获。</p>
+
+      
+    </div>
+
+    
+
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/vulnerability/" rel="tag"># vulnerability</a>
+          
+            <a href="/tags/fuzz/" rel="tag"># fuzz</a>
+          
+        </div>
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/post/2016/02/fuzz-windows-kernel-via-javascript/" rel="next" title="Fuzz Windows Kernel Via Javascript">
+                <i class="fa fa-chevron-left"></i> Fuzz Windows Kernel Via Javascript
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/post/2017/06/Automatically-Discovering-Windows-Kernel-Information-Leak-Vulnerabilities_zh/" rel="prev" title="自动化挖掘 windows 内核信息泄漏漏洞">
+                自动化挖掘 windows 内核信息泄漏漏洞 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+  </div>
+
+
+          </div>
+          
+
+  
+
+
+
+        </div>
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; 2006 – <span itemprop="copyrightYear">2021</span>
+
+  <span class="with-love" id="animate">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="https://io.tinysec.net"> Home  </a> </span>
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-address-card"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="mailto:tinyxc@gmail.com"> E-mail </a> </span>
+  
+
+  <span class="with-love" id="animate">
+    <i class="fa fa-github"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="https://github.com/tinysec"> Github </a> </span>
+  
+ 
+  <span class="with-love" id="animate">
+    <i class="fa fa-twitter"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="https://twitter.com/TinySecEx"> Twitter </a> </span>
+  
+	<!--
+  <span class="with-love" id="animate">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/about"> About </a> </span>
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-bug"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/vulnerability"> Vulnerability </a> </span>
+  
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-archive"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/archives"> Archives </a> </span>
+  
+  -->
+  <span class="with-love" id="animate">
+    <i class="fa fa-book"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/atom.xml"> RSS </a> </span>
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-sitemap"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="/sitemap.xml"> Sitemap </a> </span>
+  
+  
+  <!-- links -->
+  
+  <span class="with-love" id="animate">
+    <i class="fa fa-briefcase"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"> <a target="_blank" href="https://www.iceswordlab.com"> IceSword Lab </a> </span>
+
+  
+
+  
+</div>
+
+
+  
+
+
+
+
+
+
+
+
+
+
+        
+
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+
+    
+	
+    
+
+    
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/velocity/2.0.5/velocity.min.js"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/velocity/2.0.5/velocity.ui.min.js"></script>
+  
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=6.3.0"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=6.3.0"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=6.3.0"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=6.3.0"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=6.3.0"></script>
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
