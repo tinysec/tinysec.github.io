@@ -1,0 +1,128 @@
+<!DOCTYPE html><html lang="en" data-astro-cid-4jmloj5z> <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="A WinDbg extension that parses C headers and dumps memory as those types — like dt, but for types that were never in any PDB."><link rel="icon" type="image/x-icon" href="/favicon.ico"><title>windbg-ctype · TBlog</title><link rel="stylesheet" href="/_astro/_page_.i0so2c9W.css">
+<style>.os-icon[data-astro-cid-m6fiw3hd]{flex-shrink:0}.detail[data-astro-cid-2ei4oskr]{max-width:860px}.title[data-astro-cid-2ei4oskr]{font-size:32px;font-weight:800;margin:0}.tags[data-astro-cid-2ei4oskr]{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.tags[data-astro-cid-2ei4oskr] a[data-astro-cid-2ei4oskr]:hover{color:var(--color-accent);text-decoration:none}.summary[data-astro-cid-2ei4oskr]{font-size:18px;color:var(--color-text-muted);margin:14px 0 22px}.downloads-list[data-astro-cid-2ei4oskr]{display:flex;gap:10px;flex-wrap:wrap}.download[data-astro-cid-2ei4oskr]{padding:7px 14px;font-size:14px;font-weight:600}.shots[data-astro-cid-2ei4oskr]{margin-top:28px;display:flex;flex-direction:column;gap:16px}.shots[data-astro-cid-2ei4oskr] img{width:100%;height:auto;border:1px solid var(--color-border);border-radius:var(--radius)}.description[data-astro-cid-2ei4oskr]{margin-top:32px}.description[data-astro-cid-2ei4oskr] h2:first-child{font-size:20px;font-weight:700;margin:0 0 16px}
+</style></head> <body data-astro-cid-4jmloj5z> <header class="nav" data-astro-cid-aacjpctg> <div class="container nav-inner" data-astro-cid-aacjpctg> <a class="brand" href="/" data-astro-cid-aacjpctg>TBlog</a> <nav class="nav-links" data-astro-cid-aacjpctg> <a href="/" class="nav-link" data-astro-cid-aacjpctg> Home </a><a href="/post" class="nav-link" data-astro-cid-aacjpctg> Post </a><a href="/about" class="nav-link" data-astro-cid-aacjpctg> About </a> </nav> </div> </header>  <main class="container page" data-astro-cid-4jmloj5z>  <article class="detail" data-astro-cid-2ei4oskr> <header class="head" data-astro-cid-2ei4oskr> <h1 class="title" data-astro-cid-2ei4oskr>windbg-ctype</h1> <div class="tags" data-astro-cid-2ei4oskr> <a class="tag" href="/?q=windbg" data-astro-cid-2ei4oskr>
+#windbg </a><a class="tag" href="/?q=windows" data-astro-cid-2ei4oskr>
+#windows </a><a class="tag" href="/?q=reverse-engineering" data-astro-cid-2ei4oskr>
+#reverse-engineering </a><a class="tag" href="/?q=c" data-astro-cid-2ei4oskr>
+#c </a> </div> <p class="summary" data-astro-cid-2ei4oskr>A WinDbg extension that parses C headers and dumps memory as those types — like dt, but for types that were never in any PDB.</p>  <div class="downloads-list" data-astro-cid-2ei4oskr> <a class="btn btn-ghost download" href="https://github.com/tinysec/windbg-ctype/releases/download/v0.1.0.65/ctype-amd64-v0.1.0.65.zip" data-astro-cid-2ei4oskr> <svg class="os-icon" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true" data-astro-cid-m6fiw3hd><path d="M0 3.449 9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" data-astro-cid-m6fiw3hd></path></svg> Windows amd64 </a><a class="btn btn-ghost download" href="https://github.com/tinysec/windbg-ctype/releases/download/v0.1.0.65/ctype-i386-v0.1.0.65.zip" data-astro-cid-2ei4oskr> <svg class="os-icon" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true" data-astro-cid-m6fiw3hd><path d="M0 3.449 9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" data-astro-cid-m6fiw3hd></path></svg> Windows i386 </a> </div> </header> <section class="shots" data-astro-cid-2ei4oskr> <img src="/_astro/ctype.BX07vk4O_1GahMf.webp" alt="windbg-ctype screenshot 1" data-astro-cid-2ei4oskr="true" loading="lazy" decoding="async" fetchpriority="auto" width="1328" height="1166"> </section> <section class="prose description" data-astro-cid-2ei4oskr> <p><code>dt</code> is one of the most useful commands in WinDbg, but it only knows the types
+that are baked into the loaded PDBs. The moment you are staring at memory whose
+symbols you do not have — a third-party driver, an undocumented OS structure, a
+packet you only have a header for — <code>dt</code> has nothing to say.</p>
+<p>windbg-ctype closes that gap. You give it a C header, it parses the declarations
+itself, and from then on you can walk memory through those types exactly the way
+<code>dt</code> walks symbol types — even though the debugger has never seen a matching PDB.</p>
+<h2 id="what-it-does">What it does</h2>
+<p>The extension carries a small C parser. <code>!loadc</code> reads a header, resolves the
+type layout (the same rules the compiler would apply), and registers every
+struct, union, enum, and typedef it finds. After that:</p>
+<ul>
+<li><code>!dt</code> prints a type the way the built-in <code>dt</code> does — field names, offsets, and
+the WinDbg type of each field; pass an address and it reads and prints the
+values there too. The layout output matches WinDbg’s own <code>dt</code> for the same
+type, so it drops straight into the workflow you already have.</li>
+<li><code>!dtc</code> prints the type back as a C declaration, optionally annotated with
+offsets, which is handy when you want to paste a struct into your own code or
+sanity-check what the parser actually understood.</li>
+</ul>
+<p>It handles the parts of C that real headers actually use: nested structs and
+unions, anonymous members, bitfields, fixed arrays, pointers and function
+pointers, enum-typed fields, <code>#pragma pack</code>, and explicit alignment via
+<code>__declspec(align(N))</code> or <code>alignas(N)</code>. Include directories (<code>-I</code>) and
+preprocessor defines (<code>-D</code>) are passed through, and <code>-p&#x3C;N></code> overrides the
+default pack so you can match whatever the target was compiled with.</p>
+<p>Anything it does not own — a module-qualified name like <code>nt!_EPROCESS</code>, a
+wildcard, or a type it never loaded — is forwarded to the built-in <code>dt</code>, so you
+never lose the normal behaviour by having the extension loaded.</p>
+<h2 id="commands">Commands</h2>
+<pre class="astro-code github-light" style="background-color:#fff;color:#24292e; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>!loadc &#x3C;path> [-p&#x3C;N>] [-I &#x3C;dir>]... [-D NAME[=VALUE]]...   load a header</span></span>
+<span class="line"><span>!listc                                                     list loaded types</span></span>
+<span class="line"><span>!clearc                                                    drop all loaded types</span></span>
+<span class="line"><span>!dt [opts] &#x3C;type> [field] [address]                        dt-style listing</span></span>
+<span class="line"><span>!dtc [-v] &#x3C;type> [address]                                 C declaration output</span></span>
+<span class="line"><span>!help                                                      reference + build info</span></span></code></pre>
+<h2 id="example">Example</h2>
+<p>Say you have this header:</p>
+<pre class="astro-code github-light" style="background-color:#fff;color:#24292e; overflow-x: auto;" tabindex="0" data-language="c"><code><span class="line"><span style="color:#6A737D">// C:\headers\types.h</span></span>
+<span class="line"><span style="color:#D73A49">struct</span><span style="color:#24292E"> Scalars</span></span>
+<span class="line"><span style="color:#24292E">{</span></span>
+<span class="line"><span style="color:#D73A49">    char</span><span style="color:#24292E"> c;</span></span>
+<span class="line"><span style="color:#D73A49">    unsigned</span><span style="color:#D73A49"> char</span><span style="color:#24292E"> uc;</span></span>
+<span class="line"><span style="color:#D73A49">    short</span><span style="color:#24292E"> s;</span></span>
+<span class="line"><span style="color:#D73A49">    unsigned</span><span style="color:#D73A49"> short</span><span style="color:#24292E"> us;</span></span>
+<span class="line"><span style="color:#D73A49">    int</span><span style="color:#24292E"> i;</span></span>
+<span class="line"><span style="color:#D73A49">    unsigned</span><span style="color:#D73A49"> int</span><span style="color:#24292E"> ui;</span></span>
+<span class="line"><span style="color:#D73A49">    long</span><span style="color:#D73A49"> long</span><span style="color:#24292E"> ll;</span></span>
+<span class="line"><span style="color:#D73A49">    float</span><span style="color:#24292E"> f;</span></span>
+<span class="line"><span style="color:#D73A49">    double</span><span style="color:#24292E"> d;</span></span>
+<span class="line"><span style="color:#D73A49">    void*</span><span style="color:#24292E"> p;</span></span>
+<span class="line"><span style="color:#005CC5">    wchar_t</span><span style="color:#24292E"> w;</span></span>
+<span class="line"><span style="color:#24292E">};</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#D73A49">struct</span><span style="color:#24292E"> Bits</span></span>
+<span class="line"><span style="color:#24292E">{</span></span>
+<span class="line"><span style="color:#D73A49">    unsigned</span><span style="color:#D73A49"> long</span><span style="color:#24292E"> a : </span><span style="color:#005CC5">1</span><span style="color:#24292E">;</span></span>
+<span class="line"><span style="color:#D73A49">    unsigned</span><span style="color:#D73A49"> long</span><span style="color:#24292E"> b : </span><span style="color:#005CC5">2</span><span style="color:#24292E">;</span></span>
+<span class="line"><span style="color:#D73A49">    unsigned</span><span style="color:#D73A49"> long</span><span style="color:#24292E"> c : </span><span style="color:#005CC5">5</span><span style="color:#24292E">;</span></span>
+<span class="line"><span style="color:#D73A49">    unsigned</span><span style="color:#D73A49"> long</span><span style="color:#24292E"> d : </span><span style="color:#005CC5">24</span><span style="color:#24292E">;</span></span>
+<span class="line"><span style="color:#24292E">};</span></span></code></pre>
+<p>Load the extension, load the header, and list a type:</p>
+<pre class="astro-code github-light" style="background-color:#fff;color:#24292e; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>0:000> .load C:\tools\ctype\ctype.dll</span></span>
+<span class="line"><span>0:000> !loadc C:\headers\types.h</span></span>
+<span class="line"><span>!loadc: loaded 2 type(s) from file:C:\headers\types.h (target pointer_size=8)</span></span>
+<span class="line"><span></span></span>
+<span class="line"><span>0:000> !dt Scalars</span></span>
+<span class="line"><span>   +0x000 c                : Char</span></span>
+<span class="line"><span>   +0x001 uc               : UChar</span></span>
+<span class="line"><span>   +0x002 s                : Int2B</span></span>
+<span class="line"><span>   +0x004 us               : Uint2B</span></span>
+<span class="line"><span>   +0x008 i                : Int4B</span></span>
+<span class="line"><span>   +0x00c ui               : Uint4B</span></span>
+<span class="line"><span>   +0x010 ll               : Int8B</span></span>
+<span class="line"><span>   +0x018 f                : Float</span></span>
+<span class="line"><span>   +0x020 d                : Float</span></span>
+<span class="line"><span>   +0x028 p                : Ptr64 Void</span></span>
+<span class="line"><span>   +0x030 w                : Wchar</span></span></code></pre>
+<p>The offsets are the real layout the compiler would produce — note how <code>ll</code>
+lands at <code>+0x010</code> after the 4-byte padding behind <code>ui</code>. Bitfields are reported
+the same way <code>dt</code> reports them:</p>
+<pre class="astro-code github-light" style="background-color:#fff;color:#24292e; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>0:000> !dt Bits</span></span>
+<span class="line"><span>   +0x000 a                : Pos 0, 1 Bit</span></span>
+<span class="line"><span>   +0x000 b                : Pos 1, 2 Bits</span></span>
+<span class="line"><span>   +0x000 c                : Pos 3, 5 Bits</span></span>
+<span class="line"><span>   +0x000 d                : Pos 8, 24 Bits</span></span></code></pre>
+<p><code>!dtc</code> prints the same type back as a C declaration, with <code>-v</code> adding the
+offset of each field:</p>
+<pre class="astro-code github-light" style="background-color:#fff;color:#24292e; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>0:000> !dtc Scalars</span></span>
+<span class="line"><span>// size is 0x38 (56)</span></span>
+<span class="line"><span>struct Scalars</span></span>
+<span class="line"><span>{</span></span>
+<span class="line"><span>    char           c;</span></span>
+<span class="line"><span>    unsigned char  uc;</span></span>
+<span class="line"><span>    short          s;</span></span>
+<span class="line"><span>    unsigned short us;</span></span>
+<span class="line"><span>    int            i;</span></span>
+<span class="line"><span>    unsigned int   ui;</span></span>
+<span class="line"><span>    long long      ll;</span></span>
+<span class="line"><span>    float          f;</span></span>
+<span class="line"><span>    double         d;</span></span>
+<span class="line"><span>    void*          p;</span></span>
+<span class="line"><span>    wchar_t        w;</span></span>
+<span class="line"><span>};</span></span></code></pre>
+<p>Pass an address after the type name (<code>!dt Scalars &#x3C;address></code>) and it reads and
+prints the values living there, just like <code>dt</code>.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows, with the Debugging Tools for Windows (WinDbg / <code>cdb</code> / <code>kd</code>).</li>
+<li>The DLL architecture must match the debugger architecture: load the <strong>amd64</strong>
+build in 64-bit WinDbg and the <strong>i386</strong> build in 32-bit WinDbg. Loading the
+wrong one fails with an architecture-mismatch error.</li>
+<li>No network access and no symbol server are involved — the only input is the
+header you point it at.</li>
+</ul>
+<h2 id="install">Install</h2>
+<p>Unzip the build for your debugger’s architecture and load <code>ctype.dll</code> from
+wherever you put it:</p>
+<pre class="astro-code github-light" style="background-color:#fff;color:#24292e; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>.load C:\tools\ctype\ctype.dll</span></span>
+<span class="line"><span>!help</span></span></code></pre>
+<p><code>!help</code> prints the version, the commit it was built from, and the command list,
+so you can always tell which build you are running.</p> </section> </article>   </main> <footer class="footer" data-astro-cid-njuheroa> <div class="container footer-inner" data-astro-cid-njuheroa> <span data-astro-cid-njuheroa>© 2026 TBlog</span> </div> </footer>  <script type="module" src="/_astro/BaseLayout.astro_astro_type_script_index_0_lang.BCPdohaW.js"></script> </body> </html> 
